@@ -1,8 +1,10 @@
 # MetaExtract: Video Capture Extension Plan
 
 A Chrome (Manifest V3) extension that finds the video playing on any page,
-including Facebook and Instagram, and saves it as a single playable file with a
-metadata sidecar. Everything runs locally in the browser.
+including Facebook and Instagram (Stories too), and saves it as a single
+playable file with a JSON metadata sidecar. Everything runs locally in the
+browser. Distributed as a GitHub release you load unpacked; licensed
+GPL-3.0. See §8 for the decisions behind this.
 
 ---
 
@@ -28,9 +30,9 @@ metadata sidecar. Everything runs locally in the browser.
   encrypted media (`encrypted` event, `requestMediaKeySystemAccess`, `cenc`
   boxes) and says "protected content, can't be saved" instead of producing
   garbage.
-- **No YouTube in the Chrome Web Store build.** Store policy rejects
-  extensions that download from YouTube. The store build blocks that domain.
-  A self-distributed build can drop the block.
+- **YouTube is not a target.** It gets no adapter or special handling. The
+  generic tiers may or may not work there. (This only matters for policy if we
+  ever submit to the Chrome Web Store, which rejects YouTube downloaders.)
 - **No bulk scraping.** No profile, hashtag or "download all" crawlers. That
   needs calls to private APIs, violates Meta's terms most visibly, and is the
   thing most likely to break or get accounts flagged. One video at a time,
@@ -96,6 +98,12 @@ downloaders fail.
   **Verify in Phase 0.**
 - CDN URLs are signed and expire (`oe=` param). Download soon after detection,
   or refresh from the page.
+- **Stories** (v1 target, less certain than Instagram): Facebook's story viewer
+  loads story buckets through GraphQL with attachments whose video nodes use
+  the same `playable_url*` / `videoDeliveryLegacyFields` /
+  `videoDeliveryResponseFragment` fields as feed video. Phase 0 confirms the
+  exact paths. If the adapter misses them, MSE capture (tier 4) still works,
+  since stories play through the same MSE player.
 
 ### Instagram
 
@@ -107,6 +115,14 @@ downloaders fail.
   separate higher-quality video and audio), `has_audio`, `video_duration`,
   `carousel_media[]` for multi-item posts, plus `user.username`, `caption.text`,
   `taken_at`, `code` (shortcode) for the sidecar.
+- **Stories** (v1 target, to verify in Phase 0): opening the story viewer
+  makes the page fetch a reel tray (`reels_media` /
+  `xdt_api__v1__feed__reels_media`-style GraphQL responses). Each story item
+  carries the same `video_versions` / `video_dash_manifest` fields as a post,
+  plus `expiring_at`. Because we read passively, every story the viewer loads
+  (including ones prefetched ahead of the current one) appears in the popup,
+  labeled with owner and position ("@user · 3 of 7"). Image stories are
+  listed as images.
 - Instagram sends `X-IG-App-ID: 936619743392459` on web API calls. We won't
   make our own API calls (see 5.1), so we only need to recognise these
   responses.
@@ -242,9 +258,7 @@ codec, bitrate, width/height, language), `duration`, `muxed?`, `expiresAt?`,
   "permissions": ["webRequest", "declarativeNetRequest", "downloads",
                   "storage", "offscreen", "scripting", "tabCapture",
                   "sidePanel", "contextMenus"],
-  "host_permissions": ["*://*.facebook.com/*", "*://*.instagram.com/*",
-                       "*://*.fbcdn.net/*", "*://*.cdninstagram.com/*"],
-  "optional_host_permissions": ["<all_urls>"],
+  "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     { "matches": ["<all_urls>"], "js": ["main-world.js"],
@@ -258,13 +272,12 @@ codec, bitrate, width/height, language), `duration`, `muxed?`, `expiresAt?`,
 }
 ```
 
-Permissions strategy: Facebook and Instagram are required host permissions.
-`<all_urls>` is optional and requested at onboarding ("enable on all
-sites"). Sniffing needs the permission *before* a page loads, so `activeTab`
-alone doesn't work. This keeps the Web Store review lighter and is honest with
-users. Content scripts for other sites are registered dynamically
-(`chrome.scripting.registerContentScripts`) once the optional permission is
-granted.
+Permissions strategy: since we install it ourselves (see §8), the extension
+simply asks for `<all_urls>` at install. Sniffing needs the permission
+*before* a page loads, so `activeTab` alone wouldn't work anyway. With no
+store review to pass, there's no reason for an optional-permission flow. If
+we ever go to the Web Store, switch to Facebook/Instagram as required hosts
+and `<all_urls>` as optional.
 
 ### 4.5 Security and robustness rules
 
@@ -283,8 +296,9 @@ granted.
 ## 5. Tech stack
 
 - **TypeScript**, built with **WXT** (MV3-first, handles MAIN/ISOLATED
-  scripts, offscreen documents and a Firefox build target). Plain Vite +
-  CRXJS also works.
+  scripts and offscreen documents). Plain Vite + CRXJS also works. Chrome
+  only, so we can use Chrome-specific APIs (`offscreen`, `tabCapture`,
+  `sidePanel`, MAIN-world content scripts) without fallbacks.
 - **UI**: Preact or React + a small CSS layer. Popup and side panel share
   components.
 - **Parsing/muxing**: `m3u8-parser`, `mpd-parser`, `mux.js`, `mp4box.js`,
@@ -299,9 +313,11 @@ granted.
     refused. CI never hits live Facebook or Instagram.
   - A manual smoke checklist for live FB/IG (post, Reel, Watch, Story,
     carousel, logged-out view) run before each release.
-- **Licensing note**: cat-catch is GPL-3.0. Reading it for ideas is fine,
-  but copying code makes MetaExtract GPL-3.0. HLS Downloader is MIT and can
-  be reused with attribution. Pick our license before Phase 1 (see §8).
+- **License: GPL-3.0.** That lets us reuse code from cat-catch (GPL-3.0),
+  including its proven MSE hook. MIT code such as HLS Downloader can also be
+  included in a GPL project, so GPL-3.0 lets us borrow from both. Keep
+  upstream copyright notices on any copied file and list reused projects in
+  `THIRD_PARTY.md`.
 
 ### 5.1 Why passive extraction only
 
@@ -319,8 +335,8 @@ loaded in the page (open the post or Reel) before we can offer it.
 Each phase ends with something shippable and testable.
 
 **Phase 0: Spike and fixtures**
-- Record HAR files and page JSON for a FB post, FB Reel, FB Watch, IG post,
-  IG Reel, IG carousel and IG Story. Confirm the keys in §3, the
+- Record HAR files and page JSON for a FB post, FB Reel, FB Watch, FB Story,
+  IG post, IG Reel, IG carousel and IG Story. Confirm the keys in §3, the
   `bytestart`/`byteend` behavior, URL expiry, and whether progressive URLs are
   muxed.
 - Prototype the MAIN-world fetch tap and MSE hook on both sites. Make sure
@@ -343,6 +359,9 @@ Each phase ends with something shippable and testable.
 - Response tap, Relay/`data-sjs` page parsing, key table, candidate grouping
   (one entry per video with quality choices), carousel support, metadata
   sidecar, SPA navigation handling, expiry refresh.
+- Stories on both sites: list every loaded story item with owner and
+  position, include `story` and `expiresAt` in the sidecar, and fall back to
+  MSE capture if the story adapter misses an item.
 - *Exit:* the Phase 0 fixtures pass as unit tests; manual smoke checklist
   passes on live FB/IG at best available quality with audio.
 
@@ -353,11 +372,13 @@ Each phase ends with something shippable and testable.
   by playing it through; any non-DRM page can be recorded.
 
 **Phase 5: Hardening and release**
-- Options page, i18n, error reporting shown to the user (no telemetry),
-  permission onboarding, YouTube block in the store build, Firefox build,
-  privacy policy, store listing and screenshots.
-- *Exit:* Chrome Web Store submission; tagged GitHub release with an unpacked
-  build.
+- Options page, error messages shown to the user (no telemetry), first-run
+  page explaining what the extension does, install instructions with
+  screenshots.
+- GitHub Actions workflow that builds and attaches `metaextract-<version>.zip`
+  to each tagged release.
+- *Exit:* tagged GitHub release; following the README, someone can unzip it
+  and load it through `chrome://extensions` → Developer mode → Load unpacked.
 
 ---
 
@@ -366,22 +387,25 @@ Each phase ends with something shippable and testable.
 | Risk | Mitigation |
 |---|---|
 | Meta changes JSON shapes or player behavior | Key table as data; fixtures from Phase 0 to spot drift; generic tiers as automatic fallback; watch yt-dlp's FB/IG extractor commits as an early warning. |
-| Chrome Web Store rejection (downloader category, broad permissions) | Optional `<all_urls>`, YouTube blocked, clear DRM refusal, no remote code, privacy policy. Self-distribution as fallback. |
+| Unpacked installs don't auto-update, and Chrome shows a developer-mode notice | Keep releases infrequent and clearly versioned; the options page shows the installed version with a link to GitHub releases (a link only, no background update check). Updating means replacing the folder and clicking Reload. Moving to the Web Store later remains possible. |
+| Stories are ephemeral and the viewer auto-advances | Passive capture keeps every loaded item listed after the viewer moves on; we download from the stored URLs before they expire; MSE capture as the fallback. |
 | Large files exhaust memory | OPFS streaming; ffmpeg.wasm only below a size threshold, otherwise in-JS remux or separate tracks. |
 | MV3 service worker shutdown mid-download | Work in the offscreen document; persisted queue; resumable segment index. |
 | Hooks break a site or get detected | Proxy-based, toString-preserving hooks; per-site kill switch in options; MSE hook can be turned off. |
-| Legal and terms exposure | Personal-use framing in the listing and UI; no DRM; no bulk tools; no YouTube in the store build. Users are responsible for the rights to what they save. |
+| Legal and terms exposure | Personal-use framing in the README and UI; no DRM; no bulk tools. Users are responsible for the rights to what they save. |
 
 ---
 
-## 8. Open decisions
+## 8. Decisions
 
-1. **Distribution**: Chrome Web Store, or self-hosted/unpacked only? This
-   decides the YouTube block and how tightly to scope permissions.
-2. **Browsers**: Chrome only, or Firefox/Edge as well? WXT makes Firefox cheap,
-   but Firefox has no `offscreen` API (it uses background pages instead).
-3. **License**: MIT (can reuse HLS Downloader code) or GPL-3.0 (can reuse
-   cat-catch code).
-4. **Metadata scope**: a sidecar JSON only, or also embed title/author/date
-   into the MP4 (`udta`/`©nam` atoms) and save thumbnails and captions?
-5. **Stories and logged-out viewing**: in scope for v1, or later?
+| Question | Decision | Effect on the plan |
+|---|---|---|
+| Distribution | **Install it yourself** (GitHub release zip, Load unpacked). It's easier: no store review, no listing or privacy-policy work, and no permission compromises. | `<all_urls>` requested directly (§4.4); no store-specific YouTube block; Phase 5 ships a release zip instead of a store submission. |
+| Browsers | **Chrome only** | Use Chrome-only APIs freely; no Firefox build or fallbacks. Other Chromium browsers (Edge, Brave) will probably work, but we won't test them. |
+| License | **GPL-3.0**. It's the easier choice because it lets us reuse cat-catch *and* MIT-licensed code such as HLS Downloader. | `LICENSE` is GPL-3.0; keep upstream notices; `THIRD_PARTY.md`. |
+| Metadata | **Separate JSON sidecar** only | Nothing is written into the MP4. Sidecar fields: `site`, `kind` (post/reel/story/…), `postUrl`, `author`, `title`, `caption`, `publishedAt`, `duration`, `width`, `height`, `sourceTier`, `savedAt`, plus `expiresAt` for stories. |
+| Stories | **v1**, with MSE capture as the safety net | Added to §3, Phase 0 fixtures and Phase 3 scope. |
+
+Still open, and not needed until Phase 3: whether to support logged-out
+viewing of public Instagram posts. It needs no extra work beyond what the page
+loads, but Instagram shows logged-out visitors very little.
