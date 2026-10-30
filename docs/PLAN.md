@@ -344,10 +344,16 @@ Each phase ends with something shippable and testable.
 - *Exit:* fixture set committed; written list of the exact JSON paths in use
   today.
 
-**Phase 1: Skeleton + generic progressive**
+**Phase 1: Skeleton + generic progressive** (done)
 - WXT project, service worker, popup, detection store, `webRequest` sniffing,
   DOM scan, direct downloads, filename templates, badge.
 - *Exit:* saves a progressive MP4 from a plain site; e2e test green.
+- Also landed: options page, JSON sidecar for progressive downloads, list
+  persistence across service worker restarts, GitHub Actions CI.
+- Deferred: the MAIN-world script (response tap, MSE hook, EME detector)
+  arrives with the phases that use it (3 and 4). `MediaCandidate` is still
+  one URL per entry; `tracks[]`, `duration` and `drm` arrive with the
+  stream engine (Phase 2).
 
 **Phase 2: Download engine**
 - Offscreen document, OPFS storage, HLS and DASH downloaders, AES-128,

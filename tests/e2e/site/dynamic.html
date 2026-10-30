@@ -1,0 +1,13 @@
+<!doctype html>
+<title>Dynamic page</title>
+<h1>Dynamic page</h1>
+<script>
+  // A player that inserts its <video> late and never preloads it, so only
+  // the DOM scan can see it.
+  setTimeout(() => {
+    const video = document.createElement('video');
+    video.preload = 'none';
+    video.src = '/media/late.mp4';
+    document.body.append(video);
+  }, 800);
+</script>
