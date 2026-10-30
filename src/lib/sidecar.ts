@@ -37,7 +37,17 @@ export function siteName(pageUrl: string | undefined, mediaUrl: string): string 
   return 'unknown';
 }
 
-export function buildSidecar(candidate: MediaCandidate, savedAt: Date): Sidecar {
+/** Details known only after downloading (streams report them from their manifest). */
+export interface SidecarExtras {
+  duration?: number;
+  width?: number;
+  height?: number;
+  /** Size and type of the saved file, when they differ from what was detected. */
+  size?: number;
+  mimeType?: string;
+}
+
+export function buildSidecar(candidate: MediaCandidate, savedAt: Date, extras: SidecarExtras = {}): Sidecar {
   return {
     schemaVersion: 1,
     site: siteName(candidate.pageUrl, candidate.url),
@@ -47,13 +57,13 @@ export function buildSidecar(candidate: MediaCandidate, savedAt: Date): Sidecar 
     title: candidate.pageTitle ?? null,
     caption: null,
     publishedAt: null,
-    duration: null,
-    width: null,
-    height: null,
+    duration: extras.duration ?? null,
+    width: extras.width ?? null,
+    height: extras.height ?? null,
     expiresAt: null,
     mediaUrl: candidate.url,
-    mimeType: candidate.mimeType ?? null,
-    size: candidate.size ?? null,
+    mimeType: extras.mimeType ?? candidate.mimeType ?? null,
+    size: extras.size ?? candidate.size ?? null,
     sourceTier: candidate.source,
     savedAt: savedAt.toISOString(),
   };

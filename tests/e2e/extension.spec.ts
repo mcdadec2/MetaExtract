@@ -1,21 +1,6 @@
 import { readFileSync } from 'node:fs';
-import type { Page, Worker } from '@playwright/test';
 import { expect, test } from './fixtures';
-
-/** Finds the extension's tab id for a page, from inside the service worker. */
-async function tabIdFor(serviceWorker: Worker, page: Page): Promise<number> {
-  const url = page.url();
-  return serviceWorker.evaluate(async (target) => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find((tab) => tab.url === target)!.id!;
-  }, url);
-}
-
-async function openPopup(page: Page, extensionId: string, tabId: number): Promise<Page> {
-  const popup = await page.context().newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html?tabId=${tabId}`);
-  return popup;
-}
+import { openPopup, tabIdFor } from './helpers';
 
 test('detects a progressive MP4 and saves it with a JSON sidecar', async ({
   page,
@@ -37,7 +22,7 @@ test('detects a progressive MP4 and saves it with a JSON sidecar', async ({
     .toBe('1');
 
   await row.getByRole('button', { name: 'Download' }).click();
-  await expect(row.getByRole('button')).toHaveText('Saved');
+  await expect(row.getByRole('button')).toHaveText('Added');
 
   const downloads = await expect
     .poll(async () => {
@@ -66,7 +51,7 @@ test('detects a progressive MP4 and saves it with a JSON sidecar', async ({
   });
 });
 
-test('lists an HLS playlist as a stream without offering a download yet', async ({
+test('lists an HLS media playlist with its single quality', async ({
   page,
   site,
   serviceWorker,
@@ -76,8 +61,9 @@ test('lists an HLS playlist as a stream without offering a download yet', async 
   const popup = await openPopup(page, extensionId, await tabIdFor(serviceWorker, page));
   const row = popup.locator('.row', { hasText: 'stream.m3u8' });
   await expect(row).toContainText('HLS');
-  await expect(row).toContainText('stream engine');
-  await expect(row.getByRole('button')).toBeDisabled();
+  await expect(row).toContainText('Default quality');
+  await expect(row).toContainText('0:02');
+  await expect(row.getByRole('button', { name: 'Download' })).toBeEnabled();
 });
 
 test('finds videos named in og:video and JSON-LD', async ({ page, site, serviceWorker, extensionId }) => {

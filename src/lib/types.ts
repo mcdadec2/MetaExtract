@@ -1,4 +1,6 @@
-/** How the media is delivered. Only `progressive` is downloadable in Phase 1. */
+import type { StreamInfo } from './streams/types';
+
+/** How the media is delivered. */
 export type MediaKind = 'progressive' | 'hls' | 'dash';
 
 /** Which detection tier found the media (see docs/PLAN.md §4.1). */
@@ -16,6 +18,10 @@ export interface MediaCandidate {
   pageUrl?: string;
   pageTitle?: string;
   detectedAt: number;
+  /** HLS/DASH only: qualities read from the manifest, once inspected. */
+  stream?: StreamInfo;
+  /** HLS/DASH only: why the manifest couldn't be read. */
+  streamError?: string;
 }
 
 /** What the content script reports for each media URL it finds in the DOM. */

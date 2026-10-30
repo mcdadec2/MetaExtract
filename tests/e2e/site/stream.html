@@ -1,0 +1,8 @@
+<!doctype html>
+<title>Stream page</title>
+<h1>Stream page</h1>
+<script>
+  // Stands in for an MSE player (hls.js, dash.js) loading its manifest:
+  // stream.html?src=/streams/hls-ts/master.m3u8 (src may repeat)
+  for (const src of new URLSearchParams(location.search).getAll('src')) fetch(src).then((r) => r.text());
+</script>

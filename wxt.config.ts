@@ -8,7 +8,15 @@ export default defineConfig({
     name: 'MetaExtract',
     description:
       'Save the video playing on any page as a single file with a JSON metadata sidecar.',
-    permissions: ['webRequest', 'downloads', 'storage'],
+    permissions: [
+      'webRequest',
+      'downloads',
+      'storage',
+      'unlimitedStorage',
+      'offscreen',
+      'declarativeNetRequestWithHostAccess',
+      'sidePanel',
+    ],
     host_permissions: ['<all_urls>'],
     action: { default_title: 'MetaExtract' },
   },

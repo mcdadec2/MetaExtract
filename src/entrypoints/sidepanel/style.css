@@ -1,0 +1,85 @@
+main {
+  padding: 12px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+button.link {
+  background: none;
+  color: var(--accent);
+  padding: 0;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.job {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 3px;
+}
+
+.title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file,
+.details {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.job[data-state='done'] .details {
+  color: var(--ok);
+}
+
+.job[data-state='failed'] .details {
+  color: var(--danger);
+}
+
+progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.actions:empty {
+  display: none;
+}
+
+.actions button {
+  padding: 4px 10px;
+  font-size: 12px;
+}

@@ -360,6 +360,28 @@ Each phase ends with something shippable and testable.
   fMP4 and TS remux, ffmpeg.wasm fallback, queue + side panel, DRM refusal.
 - *Exit:* all local test pages (HLS/DASH variants) produce a playable single
   MP4; the EME page is refused cleanly.
+- **Status: done.** All local test streams (HLS TS, HLS fMP4 with separate
+  audio, HLS AES-128, DASH SegmentTemplate, SegmentList and SegmentBase,
+  plus a Referer-protected CDN) produce one MP4 that ffmpeg decodes without
+  errors; DRM, FairPlay and live manifests are refused with a message.
+  DRM is detected from manifests and init segments (`encv`/`enca`,
+  `pssh`); spotting EME use on the page itself needs the MAIN-world
+  script, so it moves to Phase 3/4.
+- How it turned out: manifests are read in the service worker when the
+  popup opens; jobs run one at a time in the offscreen document; tracks are
+  merged by an in-house fragmented-MP4 muxer (`src/lib/mp4/`) that rewrites
+  track ids and interleaves fragments by decode time, so output is a
+  fragmented MP4 rather than a classic "faststart" one.
+- Deferred: **ffmpeg.wasm** (about 30 MB) isn't needed for H.264/AAC in
+  TS (mux.js handles only those) or for any codec in fMP4 (the merger
+  doesn't look inside samples), which covers the formats we've seen; it
+  comes back only if a real site needs it (WebM DASH, HEVC or MP3 in TS). Also not yet: live
+  streams, HLS playlists that switch init segments, multi-period DASH,
+  subtitles, and turning fragmented output into a classic MP4 if some
+  player turns out not to accept it.
+- Not tested yet: real sites and public test streams (the build
+  environment's network blocks them). The engine handles a 3-minute 720p
+  stream in under a second of processing time.
 
 **Phase 3: Facebook and Instagram adapters**
 - Response tap, Relay/`data-sjs` page parsing, key table, candidate grouping

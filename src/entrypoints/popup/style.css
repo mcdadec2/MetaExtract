@@ -76,3 +76,19 @@ h1 {
   font-size: 12px;
   margin-top: 2px;
 }
+
+nav {
+  display: flex;
+  gap: 12px;
+}
+
+.quality {
+  margin-top: 6px;
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  max-width: 100%;
+}

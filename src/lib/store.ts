@@ -63,6 +63,13 @@ export class TabMediaStore {
     return true;
   }
 
+  /** Merges `patch` into one candidate. Returns whether it exists. */
+  update(tabId: number, id: string, patch: Partial<MediaCandidate>): boolean {
+    const item = this.get(tabId, id);
+    if (item) Object.assign(item, patch);
+    return item !== undefined;
+  }
+
   /** Returns whether the tab had anything to clear. */
   clear(tabId: number): boolean {
     return this.tabs.delete(tabId);
