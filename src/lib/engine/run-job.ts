@@ -175,7 +175,7 @@ export async function runStreamJob(spec: StreamJobSpec, deps: EngineDeps): Promi
 
     deps.onProgress?.({ phase: 'merging', fraction: 1, bytes });
     const output = await storage.create(outputName);
-    const size = await mergeTracks(inputs, output, plan.duration);
+    const size = await mergeTracks(inputs, output);
     await output.close();
     signal.throwIfAborted();
     return { name: outputName, size, plan };

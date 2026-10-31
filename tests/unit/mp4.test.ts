@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { children, readBoxes, u32, payload, child } from '../../src/lib/mp4/box';
-import { FragmentCollector, fragmentTime } from '../../src/lib/mp4/collector';
+import { FragmentCollector } from '../../src/lib/mp4/collector';
 import { parseInit } from '../../src/lib/mp4/init';
 import { mergeTracks, type MergeInput } from '../../src/lib/mp4/merge';
 import { fixtureBytes, ORIGIN } from './fixtures';
-import { hasFfprobe, probe } from './media-check';
+import { hasFfprobe, packets, probe } from './media-check';
 import { MemoryFile } from './memory-file';
 
 const S = `${ORIGIN}/streams`;
@@ -27,9 +27,9 @@ const templateTrack = (id: number, count: number) =>
     fixtureBytes,
   );
 
-async function merge(inputs: MergeInput[], duration?: number): Promise<Uint8Array> {
+async function merge(inputs: MergeInput[]): Promise<Uint8Array> {
   const out = new MemoryFile();
-  await mergeTracks(inputs, out, duration);
+  await mergeTracks(inputs, out);
   return out.bytes();
 }
 
@@ -69,35 +69,48 @@ describe('FragmentCollector', () => {
 });
 
 describe('mergeTracks', () => {
-  it('merges video and audio into one file with tracks 1 and 2, interleaved by time', async () => {
-    const bytes = await merge([await collect(templateTrack(0, 4)), await collect(templateTrack(1, 5))], 4);
+  it('writes a standard MP4: ftyp, moov with sample tables, one mdat', async () => {
+    const bytes = await merge([await collect(templateTrack(0, 4)), await collect(templateTrack(1, 5))]);
     const top = readBoxes(bytes);
-    expect(top[0]!.type).toBe('ftyp');
-    expect(top[1]!.type).toBe('moov');
+    expect(top.map((b) => b.type)).toEqual(['ftyp', 'moov', 'mdat']);
     const moov = top[1]!;
-    const ids = children(bytes, moov)
-      .filter((b) => b.type === 'trak')
-      .map((trak) => u32(bytes, payload(child(bytes, trak, 'tkhd')!) + 12));
-    expect(ids).toEqual([1, 2]);
-    expect(children(bytes, child(bytes, moov, 'mvex')!).map((b) => b.type)).toEqual(['mehd', 'trex', 'trex']);
+    expect(children(bytes, moov).map((b) => b.type)).toEqual(['mvhd', 'trak', 'trak']);
+    const traks = children(bytes, moov).filter((b) => b.type === 'trak');
+    expect(traks.map((trak) => u32(bytes, payload(child(bytes, trak, 'tkhd')!) + 12))).toEqual([1, 2]);
+    const stbl = (trak: (typeof traks)[number]) =>
+      children(bytes, child(bytes, child(bytes, child(bytes, trak, 'mdia')!, 'minf')!, 'stbl')!).map((b) => b.type);
+    // Keyframes listed (stss); B-frames need composition offsets (ctts).
+    expect(stbl(traks[0]!)).toEqual(['stsd', 'stts', 'stss', 'ctts', 'stsc', 'stsz', 'stco']);
+    expect(stbl(traks[1]!)).toEqual(['stsd', 'stts', 'stsc', 'stsz', 'stco']);
+    // Chunk offsets point inside the mdat.
+    const mdat = top[2]!;
+    const stco = child(bytes, child(bytes, child(bytes, child(bytes, traks[0]!, 'mdia')!, 'minf')!, 'stbl')!, 'stco')!;
+    const first = u32(bytes, payload(stco) + 8);
+    expect(first).toBeGreaterThanOrEqual(mdat.start + 8);
+    expect(first).toBeLessThan(mdat.start + mdat.size);
+  });
 
-    const moofs = top.filter((b) => b.type === 'moof');
-    expect(moofs).toHaveLength(9);
-    const mergedInit = parseInit(bytes.slice(moov.start, moov.start + moov.size));
-    const times = moofs.map((moof) => fragmentTime(bytes.slice(moof.start, moof.start + moof.size), mergedInit));
-    expect(times).toEqual([...times].sort((a, b) => a - b));
-    expect(times[0]).toBe(0);
-    expect(times.at(-1)).toBeGreaterThan(3.9);
-    const sequences = moofs.map((moof) => u32(bytes, payload(child(bytes, moof, 'mfhd')!) + 4));
-    expect(sequences).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  it.skipIf(!hasFfprobe)('keeps every sample, timestamp and keyframe of the source', async () => {
+    const video = fixtureBytes(`${S}/dash-single/stream-0.mp4`);
+    const audio = fixtureBytes(`${S}/dash-single/stream-1.mp4`);
+    const output = await merge([await collect([video], 999), await collect([audio])]);
+    expect(packets(output, 'v:0')).toEqual(packets(video, 'v:0'));
+    // The AAC encoder's priming frame (before 0 s) is flagged for discarding
+    // in a standard MP4, exactly as ffmpeg's own MP4s do.
+    const undiscarded = (lines: string[]) => lines.map((line) => line.replace(/^(-[^,]+,[^,]+,[^,]+,K)D_/, '$1__'));
+    expect(undiscarded(packets(output, 'a:0'))).toEqual(packets(audio, 'a:0'));
+    expect(packets(output, 'v:0')).toHaveLength(100);
   });
 
   it.skipIf(!hasFfprobe)('produces a file ffmpeg decodes cleanly (template and single-file inputs)', async () => {
     for (const inputs of [
       [await collect(templateTrack(0, 4)), await collect(templateTrack(1, 5))],
-      [await collect([fixtureBytes(`${S}/dash-single/stream-0.mp4`)], 999), await collect([fixtureBytes(`${S}/dash-single/stream-1.mp4`)])],
+      [
+        await collect([fixtureBytes(`${S}/dash-single/stream-0.mp4`)], 999),
+        await collect([fixtureBytes(`${S}/dash-single/stream-1.mp4`)]),
+      ],
     ]) {
-      const result = probe(await merge(inputs, 4));
+      const result = probe(await merge(inputs));
       expect(result.streams.map((s) => s.codec_name)).toEqual(['h264', 'aac']);
       expect(result.streams[0]).toMatchObject({ width: 320, height: 180 });
       expect(result.duration).toBeGreaterThan(3.9);

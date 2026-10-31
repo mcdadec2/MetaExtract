@@ -6,6 +6,8 @@ export interface TrackInfo {
   timescale: number;
   /** 'vide', 'soun', … */
   handler: string;
+  /** First sample entry type: 'avc1', 'mp4a', … */
+  codec: string;
   trak: Uint8Array;
   trex?: Uint8Array;
 }
@@ -56,12 +58,14 @@ export function parseInit(moovBytes: Uint8Array): InitInfo {
       const stsd = descend(moovBytes, trak, ['mdia', 'minf', 'stbl', 'stsd']);
       if (!tkhd || !mdhd || !hdlr || !stsd) throw new Mp4Error('Incomplete trak box.');
       // stsd: version/flags and entry count precede the sample entries.
-      if (children(moovBytes, stsd, 8).some((entry) => ENCRYPTED_ENTRIES.has(entry.type))) encrypted = true;
+      const entries = children(moovBytes, stsd, 8);
+      if (entries.some((entry) => ENCRYPTED_ENTRIES.has(entry.type))) encrypted = true;
       const id = u32(moovBytes, trackIdOffset(moovBytes, tkhd));
       return {
         id,
         timescale: timescaleOf(moovBytes, mdhd),
         handler: fourcc(moovBytes, payload(hdlr) + 8),
+        codec: entries[0]?.type ?? '',
         trak: bytesOf(moovBytes, trak),
         trex: trexById.get(id),
       };

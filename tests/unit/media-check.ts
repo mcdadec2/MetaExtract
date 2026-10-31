@@ -27,3 +27,23 @@ export function probe(file: string | Uint8Array): ProbeResult {
   const decode = spawnSync('ffmpeg', ['-v', 'error', '-i', path, '-f', 'null', '-'], { encoding: 'utf8' });
   return { streams: json.streams, duration: Number(json.format.duration), decodeErrors: decode.stderr.trim() };
 }
+
+/**
+ * Every packet of one stream ('v:0', 'a:0') as "pts,dts,size,flags" lines.
+ * Comparing these between a source and our output proves the samples,
+ * their timing and keyframes survived unchanged.
+ */
+export function packets(file: string | Uint8Array, stream: string): string[] {
+  let path = file as string;
+  if (typeof file !== 'string') {
+    path = join(mkdtempSync(join(tmpdir(), 'metaextract-probe-')), 'in.mp4');
+    writeFileSync(path, file);
+  }
+  const result = spawnSync(
+    'ffprobe',
+    ['-v', 'error', '-select_streams', stream, '-show_entries', 'packet=pts_time,dts_time,size,flags', '-of', 'csv=p=0', path],
+    { encoding: 'utf8' },
+  );
+  if (result.status !== 0) throw new Error(`ffprobe failed: ${result.stderr}`);
+  return result.stdout.trim().split('\n');
+}

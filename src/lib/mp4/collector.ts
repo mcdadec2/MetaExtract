@@ -11,6 +11,8 @@ export interface FragmentEntry {
   size: number;
   /** Earliest decode time in the fragment, in seconds. */
   time: number;
+  /** Length of the moof at the start of the fragment. */
+  moofSize: number;
   /** The moof's position in the resource it came from (for absolute data offsets). */
   sourceOffset: number;
 }
@@ -142,7 +144,13 @@ export class FragmentCollector {
     } else if (type === 'moof') {
       if (!this.init) throw new Mp4Error('Found a fragment before the init segment.');
       if (this.open) throw new Mp4Error('Found a moof without its mdat.');
-      this.open = { offset: this.written, size: 0, time: fragmentTime(bytes, this.init), sourceOffset: start };
+      this.open = {
+        offset: this.written,
+        size: 0,
+        time: fragmentTime(bytes, this.init),
+        moofSize: bytes.length,
+        sourceOffset: start,
+      };
       await this.write(bytes);
     }
   }

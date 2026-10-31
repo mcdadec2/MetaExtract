@@ -369,16 +369,17 @@ Each phase ends with something shippable and testable.
   script, so it moves to Phase 3/4.
 - How it turned out: manifests are read in the service worker when the
   popup opens; jobs run one at a time in the offscreen document; tracks are
-  merged by an in-house fragmented-MP4 muxer (`src/lib/mp4/`) that rewrites
-  track ids and interleaves fragments by decode time, so output is a
-  fragmented MP4 rather than a classic "faststart" one.
+  merged by an in-house MP4 writer (`src/lib/mp4/`) that turns the
+  fragments into a standard MP4 (moov with full sample tables before one
+  mdat, chunks interleaved by time), the layout `ffmpeg -c copy` produces.
+  The first version wrote fragmented MP4, which QuickTime Player refused;
+  tests now check output packet by packet against the source.
 - Deferred: **ffmpeg.wasm** (about 30 MB) isn't needed for H.264/AAC in
   TS (mux.js handles only those) or for any codec in fMP4 (the merger
   doesn't look inside samples), which covers the formats we've seen; it
   comes back only if a real site needs it (WebM DASH, HEVC or MP3 in TS). Also not yet: live
   streams, HLS playlists that switch init segments, multi-period DASH,
-  subtitles, and turning fragmented output into a classic MP4 if some
-  player turns out not to accept it.
+  subtitles.
 - Not tested yet: real sites and public test streams (the build
   environment's network blocks them). The engine handles a 3-minute 720p
   stream in under a second of processing time.
